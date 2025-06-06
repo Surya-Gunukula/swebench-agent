@@ -71,12 +71,12 @@ def apply_test_patch(repo_dir: Path, test_patch: str) -> bool:
         print(f"DEBUG: Writing normalized patch to: {test_file.resolve()}")
         test_file.write_text(test_patch, encoding="utf-8")
     except Exception as e:
-        print(f"❌ ERROR: Could not write patch file at {test_file!s}: {e}")
+        print(f"ERROR: Could not write patch file at {test_file!s}: {e}")
         return False
 
     # 2.b) Confirm it exists
     if not test_file.exists():
-        print(f"❌ ERROR: After write_text, patch file is missing at: {test_file.resolve()}")
+        print(f"ERROR: After write_text, patch file is missing at: {test_file.resolve()}")
         return False
     else:
         print(f"DEBUG: Patch file confirmed at: {test_file.resolve()}")
@@ -88,7 +88,7 @@ def apply_test_patch(repo_dir: Path, test_patch: str) -> bool:
         check_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     if check_proc.returncode != 0:
-        print("❌ git apply --check failed:\n")
+        print("git apply --check failed:\n")
         print(check_proc.stderr.strip(), "\n")
         test_file.unlink(missing_ok=True)
         return False
@@ -100,7 +100,7 @@ def apply_test_patch(repo_dir: Path, test_patch: str) -> bool:
         apply_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     if apply_proc.returncode != 0:
-        print("❌ git apply failed:\n")
+        print("git apply failed:\n")
         print(apply_proc.stderr.strip(), "\n")
         test_file.unlink(missing_ok=True)
         return False
@@ -157,26 +157,10 @@ def extract_failure_location(stdout_lines: list[str]):
     
 
 def detect_test_command(repo_dir: Path) -> str:
-    """
-    Inspect the cloned repo_dir and return a reasonable test command string.
-    Common heuristics:
-      - Python w/ pytest.ini / setup.py         -> "pytest -q"
-      - Python w/o pytest but with unittest       -> "python -m unittest discover"
-      - Node.js w/ package.json & "test" script   -> "npm test"
-      - Go w/ go.mod                              -> "go test ./..."
-      - Rust w/ Cargo.toml                        -> "cargo test --quiet"
-      - Java w/ pom.xml                           -> "mvn test -q"
-      - Java w/ build.gradle                      -> "./gradlew test --quiet"
-      - Makefile w/ "test" target                 -> "make test"
-    If nothing matches, returns an empty string.
-    """
 
-    # 1) Check for Python / pytest
     if (repo_dir / "pytest.ini").exists() or (repo_dir / "tox.ini").exists():
         return "pytest -q"
     if (repo_dir / "setup.py").exists() or (repo_dir / "pyproject.toml").exists():
-        # We assume projects listing pytest in dependencies will run with pytest:
-        # Try reading setup.py/pyproject.toml to see if "pytest" appears
         try:
             if (repo_dir / "setup.py").exists():
                 setup_text = (repo_dir / "setup.py").read_text(errors="ignore")
@@ -188,10 +172,8 @@ def detect_test_command(repo_dir: Path) -> str:
                     return "pytest -q"
         except Exception:
             pass
-        # Fall back to unittest if no explicit pytest mention:
         return "python -m unittest discover"
 
-    # 2) Check for Node.js / package.json
     pkg_json = repo_dir / "package.json"
     if pkg_json.exists():
         try:
@@ -201,41 +183,32 @@ def detect_test_command(repo_dir: Path) -> str:
                 return "npm test"
         except Exception:
             pass
-        # Fallback: if there's a “test” folder or “__tests__”, maybe `npm test` still works
         return "npm test"
 
-    # 3) Check for Go
     if (repo_dir / "go.mod").exists() or any(repo_dir.glob("*.go")):
         return "go test ./..."
 
-    # 4) Check for Rust
     if (repo_dir / "Cargo.toml").exists():
         return "cargo test --quiet"
 
-    # 5) Check for Java / Maven
     if (repo_dir / "pom.xml").exists():
         return "mvn test -q"
 
-    # 6) Check for Java / Gradle
     if (repo_dir / "build.gradle").exists() or (repo_dir / "build.gradle.kts").exists():
-        # Prefer the Gradle Wrapper if it exists
         if (repo_dir / "gradlew").exists():
             return "./gradlew test --quiet"
         return "gradle test --quiet"
 
-    # 7) Check for a Makefile with “test:” target
     makefile = repo_dir / "Makefile"
     if makefile.exists():
         try:
             content = makefile.read_text(errors="ignore").splitlines()
             for line in content:
-                # Basic check: looks for “test:” at the start (ignoring leading whitespace)
                 if line.lstrip().startswith("test:"):
                     return "make test"
         except Exception:
             pass
 
-    # 8) If nothing obvious is found, return empty—caller must handle this case
     return ""
 
 def install_clone_into_venv(repo_dir: Path) -> bool:
@@ -248,7 +221,6 @@ def install_clone_into_venv(repo_dir: Path) -> bool:
     Returns True if all three install commands succeed, False otherwise.
     """
     try:
-        # 1) pip install the cloned package itself (editable mode)
         subprocess.run(
             ["python", "-m", "pip", "install", "--upgrade", "pip"],
             cwd=repo_dir,
@@ -263,7 +235,6 @@ def install_clone_into_venv(repo_dir: Path) -> bool:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        # 2) Runtime requirements
         req1 = repo_dir / "requirements.txt"
         if req1.exists():
             subprocess.run(
@@ -273,7 +244,6 @@ def install_clone_into_venv(repo_dir: Path) -> bool:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-        # 3) Dev/test requirements
         req_dev = repo_dir / "requirements_dev.txt"
         if req_dev.exists():
             subprocess.run(
