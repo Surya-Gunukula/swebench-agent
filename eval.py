@@ -7,12 +7,12 @@ def eval():
     final_results = []
 
     for datapoint in dev_set:
-        result = test_single_example(datapoint)
+        #result = test_single_example(datapoint)
 
         final_results.append({
             "instance_id": datapoint["instance_id"],
-            "model": "gpt-4o",
-            "prediction": result["llm_patch"]
+            "model_name_or_path": "gpt-4o",
+            "model_patch": datapoint["patch"]
         })
 
     output_path = "predictions.json"

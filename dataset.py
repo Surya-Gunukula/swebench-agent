@@ -12,6 +12,10 @@ def load_swe_bench_lite(split: str):
     
     return subset
 
+def load_swe_bench_lite_bm25(split: str):
+    dataset = load_dataset("princeton-nlp/SWE-bench_Lite_bm25_27k")
+    
+
 if __name__ == '__main__':
     dev_set = load_swe_bench_lite('dev')
 
