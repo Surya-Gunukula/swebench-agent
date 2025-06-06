@@ -1,5 +1,9 @@
 from pathlib import Path
 import subprocess
+import re
+import json
+import shlex
+import os
 
 def clone_and_checkout(repo: str, commit: str, base_dir: Path):
 
@@ -17,33 +21,24 @@ def clone_and_checkout(repo: str, commit: str, base_dir: Path):
 
     return repo_dir
 
-def load_relevant_code(repo_dir: Path, relevant_files: list[str])->str:
+def load_relevant_code(repo_dir: Path, failure_path: str, line_no: int, context_radius: int = 50)->str:
 
-    MAX_CHARS = 30000
-    parts = []
-
-    def try_append(file_path:Path):
+    try:
+        abs_path = Path(failure_path)
+        # If pytest printed an absolute path outside of repo_dir, attempt to relativize:
         try:
-            text = file_path.read_text(encoding='utf-8', errors='ignore')
-            parts.append(f"==== FILE: {file_path.relative_to(repo_dir)} =====\n")
-            parts.append(text + "\n\n")
+            rel = abs_path.relative_to(repo_dir)
+            target_file = repo_dir / rel
         except Exception:
-            pass
-    
-    if relevant_files:
-        for rel in relevant_files:
-            fpath = repo_dir / rel
-            if fpath.exists() and fpath.is_file():
-                try_append(fpath)
-        if parts:
-            return "".join(parts)[:MAX_CHARS]
-        
-    for py_file in repo_dir.rglob("*.py"):
-        if len("".join(parts)) > MAX_CHARS:
-            break
-        try_append(py_file)
-    
-    return "".join(parts)[:MAX_CHARS]
+            target_file = abs_path
+
+        all_lines = target_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+        start = max(0, line_no - 1 - context_radius)
+        end = min(len(all_lines), line_no - 1 + context_radius)
+        snippet = "\n".join(all_lines[start:end])
+        return snippet
+    except Exception:
+        return ""
 
 def apply_patch(repo_dir: Path, patch_text: str):
     patch_file = repo_dir / "candidate.patch"
@@ -53,6 +48,7 @@ def apply_patch(repo_dir: Path, patch_text: str):
         ["git", "-C", str(repo_dir), "apply", "--check", str(patch_file)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        text=True
     )
     if check_proc.returncode != 0:
         patch_file.unlink(missing_ok=True)
@@ -62,40 +58,235 @@ def apply_patch(repo_dir: Path, patch_text: str):
         ["git", "-C", str(repo_dir), "apply", str(patch_file)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        text=True
     )
     patch_file.unlink(missing_ok=True)
     return apply_proc.returncode == 0
 
 
-def apply_test_patch(repo_dir: Path, test_patch: str):
-    test_file = repo_dir / "test_to_apply.patch"
-    test_file.write_text(test_patch, encoding="utf-8")
+def apply_test_patch(repo_dir: Path, test_patch: str) -> bool:
+    patch_filename = "tmp_test_to_apply.patch"
+    test_file = repo_dir / patch_filename
+    try:
+        print(f"DEBUG: Writing normalized patch to: {test_file.resolve()}")
+        test_file.write_text(test_patch, encoding="utf-8")
+    except Exception as e:
+        print(f"❌ ERROR: Could not write patch file at {test_file!s}: {e}")
+        return False
 
-    proc = subprocess.run(
-        ["git", "-C", str(repo_dir), "apply", "--check", str(test_file)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+    # 2.b) Confirm it exists
+    if not test_file.exists():
+        print(f"❌ ERROR: After write_text, patch file is missing at: {test_file.resolve()}")
+        return False
+    else:
+        print(f"DEBUG: Patch file confirmed at: {test_file.resolve()}")
+
+    # 3) Dry‐run check using relative path under repo_dir
+    check_cmd = ["git", "-C", str(repo_dir.resolve()), "apply", "--check", patch_filename]
+    print("DEBUG: Running:", " ".join(check_cmd))
+    check_proc = subprocess.run(
+        check_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
-    if proc.returncode != 0:
+    if check_proc.returncode != 0:
+        print("❌ git apply --check failed:\n")
+        print(check_proc.stderr.strip(), "\n")
         test_file.unlink(missing_ok=True)
         return False
 
+    # 4) Actually apply it
+    apply_cmd = ["git", "-C", str(repo_dir.resolve()), "apply", patch_filename]
+    print("DEBUG: Now running:", " ".join(apply_cmd))
     apply_proc = subprocess.run(
-        ["git", "-C", str(repo_dir), "apply", str(test_file)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        apply_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
+    if apply_proc.returncode != 0:
+        print("❌ git apply failed:\n")
+        print(apply_proc.stderr.strip(), "\n")
+        test_file.unlink(missing_ok=True)
+        return False
+
+    # 5) Clean up
     test_file.unlink(missing_ok=True)
-    return apply_proc.returncode == 0
+    return True
 
 
 def run_test_command(repo_dir: Path, test_command: str):
+    print(repo_dir, test_command)
     try:
         parts = test_command.strip().split()
         proc = subprocess.run(
             parts, cwd=repo_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        return proc.returncode == 0
-    except Exception:
+        print(proc.stdout)
+        return proc.stderr.splitlines()
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return []
+
+def run_pytest_in_repo(repo_dir: Path):
+    cmd = f"pytest -q"
+    parts = shlex.split(cmd)
+
+    env = os.environ.copy()
+    local_src = str(repo_dir / "src")
+    env["PYTHONPATH"] = local_src + (":" + env.get("PYTHONPATH", ""))
+
+    proc = subprocess.run(
+        parts, 
+        cwd = repo_dir,
+        stdout = subprocess.PIPE,
+        stderr = subprocess.PIPE,
+        text = True, 
+        env=env
+    )
+    stdout_lines = proc.stdout.splitlines()
+    stderr_lines = proc.stdout.splitlines()
+    return proc.returncode, stdout_lines, stderr_lines
+
+def extract_failure_location(stdout_lines: list[str]):
+    pattern = re.compile(r'file\s+"(.+?\.py)",\s*line\s*(\d+)', re.IGNORECASE)
+
+    for line in stdout_lines:
+        match = pattern.search(line)
+        if match:
+            full_path = match.group(1)
+            line_no = int(match.group(2))
+            return full_path, line_no
+    return None
+
+    
+
+def detect_test_command(repo_dir: Path) -> str:
+    """
+    Inspect the cloned repo_dir and return a reasonable test command string.
+    Common heuristics:
+      - Python w/ pytest.ini / setup.py         -> "pytest -q"
+      - Python w/o pytest but with unittest       -> "python -m unittest discover"
+      - Node.js w/ package.json & "test" script   -> "npm test"
+      - Go w/ go.mod                              -> "go test ./..."
+      - Rust w/ Cargo.toml                        -> "cargo test --quiet"
+      - Java w/ pom.xml                           -> "mvn test -q"
+      - Java w/ build.gradle                      -> "./gradlew test --quiet"
+      - Makefile w/ "test" target                 -> "make test"
+    If nothing matches, returns an empty string.
+    """
+
+    # 1) Check for Python / pytest
+    if (repo_dir / "pytest.ini").exists() or (repo_dir / "tox.ini").exists():
+        return "pytest -q"
+    if (repo_dir / "setup.py").exists() or (repo_dir / "pyproject.toml").exists():
+        # We assume projects listing pytest in dependencies will run with pytest:
+        # Try reading setup.py/pyproject.toml to see if "pytest" appears
+        try:
+            if (repo_dir / "setup.py").exists():
+                setup_text = (repo_dir / "setup.py").read_text(errors="ignore")
+                if "pytest" in setup_text:
+                    return "pytest -q"
+            if (repo_dir / "pyproject.toml").exists():
+                toml_text = (repo_dir / "pyproject.toml").read_text(errors="ignore")
+                if "pytest" in toml_text:
+                    return "pytest -q"
+        except Exception:
+            pass
+        # Fall back to unittest if no explicit pytest mention:
+        return "python -m unittest discover"
+
+    # 2) Check for Node.js / package.json
+    pkg_json = repo_dir / "package.json"
+    if pkg_json.exists():
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+            scripts = data.get("scripts", {})
+            if "test" in scripts:
+                return "npm test"
+        except Exception:
+            pass
+        # Fallback: if there's a “test” folder or “__tests__”, maybe `npm test` still works
+        return "npm test"
+
+    # 3) Check for Go
+    if (repo_dir / "go.mod").exists() or any(repo_dir.glob("*.go")):
+        return "go test ./..."
+
+    # 4) Check for Rust
+    if (repo_dir / "Cargo.toml").exists():
+        return "cargo test --quiet"
+
+    # 5) Check for Java / Maven
+    if (repo_dir / "pom.xml").exists():
+        return "mvn test -q"
+
+    # 6) Check for Java / Gradle
+    if (repo_dir / "build.gradle").exists() or (repo_dir / "build.gradle.kts").exists():
+        # Prefer the Gradle Wrapper if it exists
+        if (repo_dir / "gradlew").exists():
+            return "./gradlew test --quiet"
+        return "gradle test --quiet"
+
+    # 7) Check for a Makefile with “test:” target
+    makefile = repo_dir / "Makefile"
+    if makefile.exists():
+        try:
+            content = makefile.read_text(errors="ignore").splitlines()
+            for line in content:
+                # Basic check: looks for “test:” at the start (ignoring leading whitespace)
+                if line.lstrip().startswith("test:"):
+                    return "make test"
+        except Exception:
+            pass
+
+    # 8) If nothing obvious is found, return empty—caller must handle this case
+    return ""
+
+def install_clone_into_venv(repo_dir: Path) -> bool:
+    """
+    Inside the cloned repo, run:
+      1) pip install -e .
+      2) pip install -r requirements.txt
+      3) pip install -r requirements_dev.txt
+
+    Returns True if all three install commands succeed, False otherwise.
+    """
+    try:
+        # 1) pip install the cloned package itself (editable mode)
+        subprocess.run(
+            ["python", "-m", "pip", "install", "--upgrade", "pip"],
+            cwd=repo_dir,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        subprocess.run(
+            ["python", "-m", "pip", "install", "-e", "."],
+            cwd=repo_dir,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        # 2) Runtime requirements
+        req1 = repo_dir / "requirements.txt"
+        if req1.exists():
+            subprocess.run(
+                ["python", "-m", "pip", "install", "-r", "requirements.txt"],
+                cwd=repo_dir,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        # 3) Dev/test requirements
+        req_dev = repo_dir / "requirements_dev.txt"
+        if req_dev.exists():
+            subprocess.run(
+                ["python", "-m", "pip", "install", "-r", "requirements_dev.txt"],
+                cwd=repo_dir,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"↳ Failed to install dependencies in {repo_dir}:\n{e.stderr or e}")
         return False
+    
+
     
