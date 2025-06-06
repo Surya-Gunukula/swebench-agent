@@ -14,7 +14,7 @@ from create_docker_container import *
 
 api_key = os.environ.get("OPENAI_API_KEY")
 
-llm = ChatOpenAI(model="gpt-4o", api_key=api_key)
+llm = ChatOpenAI(model="gpt-4o", api_key=api_key, temperature=0.8)
 
 """
 High-level notes (for personal use)
@@ -111,6 +111,82 @@ def llm_call(state: State):
     )
     return {"output": [diff_report]}
 
+def llm_call(state: State):
+    messages = [
+            SystemMessage(content="You are an expert Python developer fixing a bug in a project. "
+                                    "You are given a source file and an error that occurred during test execution. "
+                                    "Your task is to write a minimal and correct **unified diff (git diff format)** "
+                                    "that fixes the root cause of the issue—not the test file itself. "
+                                    "Do not silence or bypass the error unless it leads to a correct fix."
+                                    " You must keep all other behavior unchanged. "
+                                    "Focus on modifying only what’s needed to resolve the specific bug." \
+                                    "You must fix the root cause of the exception. Do not patch unrelated code. The traceback says the failure occurred at:"
+                         ),
+            HumanMessage(
+                content=f"""The following error occurred when running the test suite:
+                            \n\n{state['error_file']}\n
+                            This file appears to be the source of the issue. Below is its full content:
+                            \n\n{state['context']}\n
+                            Please write a **minimal** and **correct** unified diff (git diff format) that resolves the error.
+                            The fix must change only the logic that is **directly responsible** for the failure.
+                            Do not comment out failing code or alter test files. Output only the diff.
+                            """
+            )
+    ]
+    return {
+        "output": [
+            llm.invoke(messages).content, 
+            llm.invoke(messages).content, 
+            llm.invoke(messages).content, 
+        ]
+    }
+
+class ChosenDiff(BaseModel):
+    best_diff: str = Field(
+        description="The best unified diff (git diff format) among the given options that most directly and correctly resolves the issue"
+    )
+
+evaluate_model = llm.with_structured_output(ChosenDiff)
+
+def ensemble_select_best_diff(state: State):
+    diffs = state["output"]  
+
+    evaluation = evaluate_model.invoke([
+        SystemMessage(
+            content="You are a senior software engineer. Your job is to evaluate 3 different proposed patches "
+                    "(in unified git diff format) and select the best one. "
+                    "The best patch is the one that: (1) directly fixes the root cause of the error, "
+                    "(2) avoids silencing the error, and (3) changes as little code as necessary."
+        ),
+        HumanMessage(
+            content=f"""The original error was:
+                    {state['error_file']}
+
+                    The context file is:
+                    {state['context']}
+
+                    Here are three proposed diffs:
+
+                    [DIFF 1]
+                    {diffs[0]}
+
+                    [DIFF 2]
+                    {diffs[1]}
+
+                    [DIFF 3]
+                    {diffs[2]}
+
+                    Which one is the best and why? Return only the best diff.
+                    """
+        )
+    ])
+
+    return {"output": evaluation.best_diff}
+    
+
+
+
+
 
 
 
@@ -120,11 +196,13 @@ graph_builder = StateGraph(State)
 graph_builder.add_node("find_file", find_file)
 graph_builder.add_node("load_file", load_file)
 graph_builder.add_node("llm_call", llm_call)
+graph_builder.add_node("ensemble_select_best_diff", ensemble_select_best_diff)
 
 graph_builder.add_edge(START, "find_file")
 graph_builder.add_edge("find_file", "load_file")
 graph_builder.add_edge("load_file", "llm_call")
-graph_builder.add_edge("llm_call", END)
+graph_builder.add_edge("llm_call", "ensemble_select_best_diff")
+graph_builder.add_edge("ensemble_select_best_diff", END)
 
 graph_worker = graph_builder.compile()
 
@@ -162,7 +240,7 @@ def test_single_example(datapoint):
             except Exception as e:
                 print(f'Failed to delete {file_path}. Reason: {e}')
 
-    return state['output'][0].content
+    return state['output']
 
 if __name__ == '__main__':
     dev_set = load_swe_bench_lite('dev')

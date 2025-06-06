@@ -49,7 +49,7 @@ In the SWE-Bench Paper, gpt-4o was able to achieve a 2.67% effective patch rate.
 
 Many of the SWE-Bench_Lite test cases are either deprecated or only work on Linux machines. 
 
-Doesn't work 
+Doesn't work \
 sb-cli submit swe-bench_lite dev \
     --predictions_path predictions.json \
     --run_id my_run_id

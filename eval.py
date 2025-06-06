@@ -1,4 +1,5 @@
 from langgraph_agent import *
+from rag_agent import *
 import json
 
 
@@ -13,8 +14,9 @@ def eval():
 
     for i, datapoint in enumerate(dev_set):
         if i != 5 and i != 6:
-            continue
-        result = test_single_example(datapoint)
+            results = test_single_example_rag(datapoint)
+        else:
+            result = test_single_example(datapoint)
 
         final_results.append({
             "instance_id": datapoint["instance_id"],

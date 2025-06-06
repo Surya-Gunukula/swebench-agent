@@ -25,47 +25,13 @@ High-level notes (for personal use)
 5. Optional: Add a like evaluator agent
 """    
 
-class FindFile(BaseModel):
-    file_name: str = Field(
-        description = "Name of the source file, not the TEST file, that is causing the error"
-    )
-    file_line: str = Field(
-        description = "The line of code, written, you believe is causing the error in the file"
-    )
-    error: str = Field(
-        description = "An explanation of the error"
-    )
-
 class State(TypedDict):
     repo_dir: str
     problem_statement: str
     context: str 
     output: str
     error: str
-    error_file: FindFile
 
-
-file_model = llm.with_structured_output(FindFile)
-
-def find_file(state: State):
-    file = file_model.invoke(
-        [
-            SystemMessage(
-                content="You are an expert software engineer reviewing a test failure."
-                        " Your task is to locate the actual **source code file** (not a test file) "
-                        "that is responsible for the failure. The error message may come from a test file, "
-                        "but your goal is to trace the root cause to the source code being tested. "
-                        "Output the name of the source file (e.g., something in `src/`), the exact line you suspect "
-                        "is causing the issue, and a clear human-readable explanation of the error."
-                        " Do not choose files named like `test_*.py` or located in `tests/`."
-            ),
-            HumanMessage(
-                content=f"Here is the error: {state['error']}"
-            )
-        ]
-    )
-
-    return {"error_file": file}
 
 def llm_call(state: State):
     diff_report = llm.invoke(
@@ -79,9 +45,9 @@ def llm_call(state: State):
                                     "Focus on modifying only what’s needed to resolve the specific bug." \
                          ),
             HumanMessage(
-                content=f"""The following error occurred when running the test suite:
-                            \n\n{state['error_file']}\n
-                            This file appears to be the source of the issue. Below is the full context that has been received using RAG:
+                content=f"""This is the problem statement:\n\n
+                            {state['problem_statement']}\n
+                            Below is the full context that has been received using RAG:
                             \n\n{state['context']}\n
                             Please write a **minimal** and **correct** unified diff (git diff format) that resolves the error.
                             The fix must change only the logic that is **directly responsible** for the failure.
@@ -98,48 +64,22 @@ def llm_call(state: State):
 
 
 graph_builder = StateGraph(State)
-graph_builder.add_node("find_file", find_file)
 graph_builder.add_node("llm_call", llm_call)
 
-graph_builder.add_edge(START, "find_file")
-graph_builder.add_edge("find_file", "llm_call")
+graph_builder.add_edge(START, "llm_call")
 graph_builder.add_edge("llm_call", END)
 
 graph_worker = graph_builder.compile()
 
 
-def test_single_example(datapoint):
+def test_single_example_rag(datapoint):
 
     example_repo       = datapoint["repo"]
     example_commit     = datapoint["base_commit"] 
     example_test_patch = datapoint["test_patch"]
     context  = datapoint["text"]
 
-    results = run_patch_and_tests_in_docker(
-        repo=example_repo,
-        commit=example_commit,
-        test_patch=example_test_patch,
-        setup_only=False,
-        python_base_image="python:3.9-slim"
-    )
-
-    print(results["pytest_stdout"])
-
-    state = graph_worker.invoke({"repo_dir": example_repo, "error": results["pytest_stdout"], "context": context})
-
-    print(state['error_file'])
-
-    container_path = "./container"
-    if os.path.exists(container_path):
-        for filename in os.listdir(container_path):
-            file_path = os.path.join(container_path, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  # remove file or link
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # remove directory
-            except Exception as e:
-                print(f'Failed to delete {file_path}. Reason: {e}')
+    state = graph_worker.invoke({"repo_dir": example_repo, "context": context})
 
     return state['output'][0].content
 
