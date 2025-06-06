@@ -18,7 +18,7 @@ def eval():
             "model_patch": result
         })
 
-    output_path = "predictions2.json"
+    output_path = "predictions.json"
     with open(output_path, "w") as f:
         json.dump(final_results, f, indent=2)    
 

@@ -67,24 +67,6 @@ def find_file(state: State):
 
     return {"error_file": file}
 
-def load_file(state:State):
-    file_to_load = Path(state['error_file'].file_name).name
-    full_repo_name = state['repo_dir']
-    repo_name = full_repo_name.split("/")[1]
-
-    safe_name = full_repo_name.replace("/", "_")
-
-    file_path = Path(f"./container/{safe_name}/src/{repo_name}/{file_to_load}")
-    print(safe_name , "+", file_to_load)
-
-    if not file_path.exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
-
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    return {"context": content}
-
 def llm_call(state: State):
     diff_report = llm.invoke(
         [
@@ -95,12 +77,11 @@ def llm_call(state: State):
                                     "Do not silence or bypass the error unless it leads to a correct fix."
                                     " You must keep all other behavior unchanged. "
                                     "Focus on modifying only what’s needed to resolve the specific bug." \
-                                    "You must fix the root cause of the exception. Do not patch unrelated code. The traceback says the failure occurred at:"
                          ),
             HumanMessage(
                 content=f"""The following error occurred when running the test suite:
                             \n\n{state['error_file']}\n
-                            This file appears to be the source of the issue. Below is its full content:
+                            This file appears to be the source of the issue. Below is the full context that has been received using RAG:
                             \n\n{state['context']}\n
                             Please write a **minimal** and **correct** unified diff (git diff format) that resolves the error.
                             The fix must change only the logic that is **directly responsible** for the failure.
@@ -118,12 +99,10 @@ def llm_call(state: State):
 
 graph_builder = StateGraph(State)
 graph_builder.add_node("find_file", find_file)
-graph_builder.add_node("load_file", load_file)
 graph_builder.add_node("llm_call", llm_call)
 
 graph_builder.add_edge(START, "find_file")
-graph_builder.add_edge("find_file", "load_file")
-graph_builder.add_edge("load_file", "llm_call")
+graph_builder.add_edge("find_file", "llm_call")
 graph_builder.add_edge("llm_call", END)
 
 graph_worker = graph_builder.compile()
@@ -134,7 +113,7 @@ def test_single_example(datapoint):
     example_repo       = datapoint["repo"]
     example_commit     = datapoint["base_commit"] 
     example_test_patch = datapoint["test_patch"]
-    example_llm_patch  = datapoint["test_patch"]
+    context  = datapoint["text"]
 
     results = run_patch_and_tests_in_docker(
         repo=example_repo,
@@ -146,7 +125,7 @@ def test_single_example(datapoint):
 
     print(results["pytest_stdout"])
 
-    state = graph_worker.invoke({"repo_dir": example_repo, "error": results["pytest_stdout"]})
+    state = graph_worker.invoke({"repo_dir": example_repo, "error": results["pytest_stdout"], "context": context})
 
     print(state['error_file'])
 
@@ -165,7 +144,7 @@ def test_single_example(datapoint):
     return state['output'][0].content
 
 if __name__ == '__main__':
-    dev_set = load_swe_bench_lite('dev')
+    dev_set = load_swe_bench_lite_bm25('dev')
     datapoint = dev_set[5]
     result = test_single_example(datapoint)
     print(result)

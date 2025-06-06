@@ -13,13 +13,14 @@ def load_swe_bench_lite(split: str):
     return subset
 
 def load_swe_bench_lite_bm25(split: str):
-    dataset = load_dataset("princeton-nlp/SWE-bench_Lite_bm25_27k")
+    dataset = load_dataset("princeton-nlp/SWE-bench_Lite_oracle")
     try:
         subset = dataset[split]
         print(f"Loaded {len(subset)} examples")
     except Exception as e:
         print(f"Failed to load dataset: {str(e)}")
         return
+    return subset
     
 
 if __name__ == '__main__':
