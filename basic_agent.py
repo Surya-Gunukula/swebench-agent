@@ -4,6 +4,7 @@ import os
 import subprocess 
 import argparse
 from pathlib import Path
+import shutil
 
 import openai
 import utils
@@ -64,6 +65,11 @@ def test_single_example(datapoint):
         llm_patch = run_agent(problem_desc, test_patch, code_context)
     except Exception as e:
         print(f"Error: {str(e)}")
+
+    try:
+        shutil.rmtree(repo_dir)
+    except Exception as cleanup_err:
+        print(f"Warning: could not remove {repo_dir}: {cleanup_err}")
 
     return {
         "repo": repo,

@@ -1,0 +1,117 @@
+[
+  {
+    "instance_id": "sqlfluff__sqlfluff-1625",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/src/sqlfluff/rules/L031.py b/src/sqlfluff/rules/L031.py\nindex 1234567..89abcde 100644\n--- a/src/sqlfluff/rules/L031.py\n+++ b/src/sqlfluff/rules/L031.py\n@@ -10,7 +10,7 @@ class Rule_L031(BaseRule):\n \n     def _eval(self, segment, **kwargs):\n         \"\"\"Avoid using aliases in join condition.\"\"\"\n-        if segment.is_type(\"join_clause\"):\n+        if segment.is_type(\"join_clause\") and segment.segments:\n             for seg in segment.segments:\n                 if seg.is_type(\"alias_expression\"):\n                     return LintResult(anchor=seg)\n"
+  },
+  {
+    "instance_id": "sqlfluff__sqlfluff-2419",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/src/sqlfluff/rules/L060.py b/src/sqlfluff/rules/L060.py\nindex 1234567..89abcde 100644\n--- a/src/sqlfluff/rules/L060.py\n+++ b/src/sqlfluff/rules/L060.py\n@@ -10,7 +10,7 @@ class Rule_L060(BaseRule):\n     def _eval(self, context: RuleContext) -> Optional[LintResult]:\n         \"\"\"Use 'COALESCE' instead of 'IFNULL' or 'NVL'.\"\"\"\n         if context.segment.name in (\"ifnull_function\", \"nvl_function\"):\n-            return LintResult(anchor=context.segment, description=\"Use 'COALESCE' instead of 'IFNULL' or 'NVL'.\")\n+            return LintResult(anchor=context.segment, description=f\"Use 'COALESCE' instead of '{context.segment.raw.upper()}'.\")\n         return None\n"
+  },
+  {
+    "instance_id": "sqlfluff__sqlfluff-1733",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/src/sqlfluff/rules/L039.py b/src/sqlfluff/rules/L039.py\nindex 1234567..89abcde 100644\n--- a/src/sqlfluff/rules/L039.py\n+++ b/src/sqlfluff/rules/L039.py\n@@ -45,7 +45,7 @@ class Rule_L039(BaseRule):\n         # If we have a newline, then we should check the indent.\n         if segment.is_type(\"newline\"):\n             # Check if the next segment is whitespace\n-            if segments[idx + 1].is_type(\"whitespace\"):\n+            if segments[idx + 1].is_type(\"whitespace\") and segments[idx + 2].is_type(\"code\"):\n                 # If it's more than one space, then it's a violation.\n                 if len(segments[idx + 1].raw) > 1:\n                     return LintResult(\n"
+  },
+  {
+    "instance_id": "sqlfluff__sqlfluff-1517",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/src/sqlfluff/core/parser/helpers.py b/src/sqlfluff/core/parser/helpers.py\nindex 1234567..89abcde 100644\n--- a/src/sqlfluff/core/parser/helpers.py\n+++ b/src/sqlfluff/core/parser/helpers.py\n@@ -27,6 +27,10 @@ def check_still_complete(\n     # Check nothing has been dropped.\n     if len(segments) != len(matched_segments) + len(unmatched_segments):\n         raise RuntimeError(\n+            \"Dropped elements in sequence matching! \"\n+            f\"{''.join(seg.raw for seg in segments)} != \"\n+            f\"{''.join(seg.raw for seg in matched_segments)}\"\n+        )\n+    # Check for unmatched semicolons\n+    if any(seg.raw == \";\" for seg in unmatched_segments):\n         raise RuntimeError(\n             \"Dropped elements in sequence matching! \"\n-            f\"{''.join(seg.raw for seg in segments)} != \"\n-            f\"{''.join(seg.raw for seg in matched_segments)}\"\n+            f\"{''.join(seg.raw for seg in unmatched_segments)}\"\n         )\n"
+  },
+  {
+    "instance_id": "sqlfluff__sqlfluff-1763",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/src/sqlfluff/core/linter/linted_file.py b/src/sqlfluff/core/linter/linted_file.py\nindex 1234567..89abcde 100644\n--- a/src/sqlfluff/core/linter/linted_file.py\n+++ b/src/sqlfluff/core/linter/linted_file.py\n@@ -1,5 +1,6 @@\n import os\n import logging\n+import codecs\n from typing import Optional, List, Tuple\n \n from sqlfluff.core.errors import SQLBaseError, SQLTemplaterError\n@@ -200,7 +201,7 @@ class LintedFile:\n         # Write the file out (only if it actually changed)\n         if content != current_content:\n             self.logger.info(\"Writing fixed file: %s\", fname)\n-            with open(fname, \"w\", encoding=encoding) as f:\n+            with codecs.open(fname, \"w\", encoding=encoding, errors=\"replace\") as f:\n                 f.write(content)\n \n     def persist_tree(self, tree: BaseSegment, ignore_mask: List[NoQaDirective]):\n"
+  },
+  {
+    "instance_id": "marshmallow-code__marshmallow-1359",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/src/marshmallow/fields.py b/src/marshmallow/fields.py\nindex 0b18e7d..700732e 100644\n--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -1114,7 +1114,7 @@ class DateTime(Field):\n         super()._bind_to_schema(field_name, schema)\n         self.format = (\n             self.format\n-            or getattr(schema.opts, self.SCHEMA_OPTS_VAR_NAME)\n+            or getattr(getattr(schema, \"opts\", None), self.SCHEMA_OPTS_VAR_NAME, None)\n             or self.DEFAULT_FORMAT\n         )\n"
+  },
+  {
+    "instance_id": "marshmallow-code__marshmallow-1343",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/src/marshmallow/schema.py b/src/marshmallow/schema.py\nindex 1234567..89abcde 100644\n--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -891,7 +891,7 @@ class Schema(BaseSchema):\n         for attr_name, field_obj in self.fields.items():\n             field_name = field_obj.attribute or attr_name\n             if field_name in data:\n-                value = data[field_obj.attribute or field_name]\n+                value = data.get(field_obj.attribute or field_name)\n                 if value is not missing:\n                     try:\n                         field_obj._validate(value)\n"
+  },
+  {
+    "instance_id": "pvlib__pvlib-python-1707",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pvlib/iam.py b/pvlib/iam.py\nindex 1234567..89abcde 100644\n--- a/pvlib/iam.py\n+++ b/pvlib/iam.py\n@@ -100,6 +100,9 @@ def physical(aoi, n=1.526, K=4.0, L=0.002):\n     aoi_rad = np.radians(aoi)\n     cos_aoi = np.cos(aoi_rad)\n \n+    if n == 1:\n+        return np.where(aoi > 90, 0, 1)\n+\n     # incidence angle modifier for normal incidence\n     iam = (1 - Rb) / (1 + Rb)\n \n"
+  },
+  {
+    "instance_id": "pvlib__pvlib-python-1072",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pvlib/temperature.py b/pvlib/temperature.py\nindex 1234567..89abcde 100644\n--- a/pvlib/temperature.py\n+++ b/pvlib/temperature.py\n@@ -599,7 +599,7 @@ def fuentes(poa_global, temp_air, wind_speed, noct_installed,\n     # convert index to timedelta64[ns] to avoid FutureWarning in pandas >= 1.0.0\n     # and to ensure compatibility with tz-aware inputs\n     index = poa_global.index\n-    timedelta_hours = np.diff(index).astype(float) / 1e9 / 60 / 60\n+    timedelta_hours = np.diff(index.view('int64')) / 1e9 / 60 / 60\n \n     # calculate the module temperature\n     tmod = pd.Series(index=index, dtype=float, name='tmod')\n"
+  },
+  {
+    "instance_id": "pvlib__pvlib-python-1606",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pvlib/tools.py b/pvlib/tools.py\nindex 582b956..d4f5b3a 100644\n--- a/pvlib/tools.py\n+++ b/pvlib/tools.py\n@@ -343,6 +343,9 @@ def _golden_sect_DataFrame(params, lower, upper, func, atol=1e-8):\n     # calculate the number of iterations\n     phim1 = 0.6180339887498949  # 1 - phi\n     iterations = 0\n+    if np.all(lower == upper):\n+        return func((lower + upper) / 2), (lower + upper) / 2\n+\n     iterlimit = int(np.trunc(np.log(atol / (df['VH'] - df['VL'])) / np.log(phim1)))\n \n     while iterations <= iterlimit:\n"
+  },
+  {
+    "instance_id": "pvlib__pvlib-python-1854",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pvlib/pvsystem.py b/pvlib/pvsystem.py\nindex 1234567..89abcde 100644\n--- a/pvlib/pvsystem.py\n+++ b/pvlib/pvsystem.py\n@@ -250,7 +250,10 @@ class PVSystem:\n         \"\"\"\n         if isinstance(arrays, Array):\n             arrays = (arrays,)\n-        elif len(arrays) == 0:\n+        elif arrays is None or len(arrays) == 0:\n             raise ValueError(\"PVSystem must have at least one Array. \"\n                              \"If you want to create a PVSystem instance \"\n                              \"without Arrays, use the other parameters.\")\n"
+  },
+  {
+    "instance_id": "pvlib__pvlib-python-1154",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pvlib/irradiance.py b/pvlib/irradiance.py\nindex 1234567..89abcde 100644\n--- a/pvlib/irradiance.py\n+++ b/pvlib/irradiance.py\n@@ -50,6 +50,9 @@ def reindl(dni, ghi, dhi, solar_zenith, solar_azimuth, surface_tilt,\n     # Calculate the diffuse irradiance on the tilted surface\n     # using the Reindl model_name_or_path\n     \n+    if ghi == 0:\n+        return 0.0\n+\n     # Calculate the geometric factor\n     cos_zenith = np.cos(np.radians(solar_zenith))\n     cos_incidence = np.cos(np.radians(surface_tilt))\n"
+  },
+  {
+    "instance_id": "pylint-dev__astroid-1978",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\n--- a/astroid/raw_building.py\n+++ b/astroid/raw_building.py\n@@ -467,7 +467,7 @@\n         except AttributeError:\n             continue\n         try:\n-            getattr(sys.modules[modname], name)\n+            getattr(sys.modules[modname], name, None)\n         except AttributeError:\n             continue\n         except ImportError:\n"
+  },
+  {
+    "instance_id": "pylint-dev__astroid-1333",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/astroid/modutils.py b/astroid/modutils.py\nindex 1234567..89abcde 100644\n--- a/astroid/modutils.py\n+++ b/astroid/modutils.py\n@@ -300,7 +300,7 @@ def modpath_from_file(filename, is_namespace=False):\n     if not os.path.isfile(filename):\n         raise ImportError(f\"Unable to load file {filename}\")\n \n-    if not filename.endswith(\"__init__.py\"):\n+    if not filename.endswith(\"__init__.py\") and not is_namespace:\n         raise ImportError(f\"Unable to load file {filename}\")\n \n     filename = os.path.abspath(filename)\n"
+  },
+  {
+    "instance_id": "pylint-dev__astroid-1196",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/astroid/nodes/node_classes.py b/astroid/nodes/node_classes.py\nindex 1f2d3e4..5a6b7c8 100644\n--- a/astroid/nodes/node_classes.py\n+++ b/astroid/nodes/node_classes.py\n@@ -2249,7 +2249,13 @@ class Dict(NodeNG, AssignTypeMixin):\n         for key, value in self.items:\n             if key == index:\n                 return value\n-        return self._getitem_from_unpackings(index, context)\n+        try:\n+            return self._getitem_from_unpackings(index, context)\n+        except AttributeError:\n+            # If the object is uninferable, raise AstroidIndexError instead\n+            raise exceptions.AstroidIndexError(\n+                f\"Cannot infer item {index!r} from {self!r}\"\n+            )\n \n     def _getitem_from_unpackings(self, index, context=None):\n         \"\"\"Get an item from a dictionary that has unpacked elements.\"\"\"\n"
+  },
+  {
+    "instance_id": "pylint-dev__astroid-1866",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/astroid/brain/brain_builtin_inference.py b/astroid/brain/brain_builtin_inference.py\nindex 1234567..89abcde 100644\n--- a/astroid/brain/brain_builtin_inference.py\n+++ b/astroid/brain/brain_builtin_inference.py\n@@ -954,7 +954,7 @@ def _infer_str_format_call(node, context, func):\n         )\n         return iter([util.Uninferable])\n     try:\n-        formatted_string = format_template.format(*pos_values, **keyword_values)\n+        formatted_string = format_template.format(*(v if v is not None else '' for v in pos_values), **{k: (v if v is not None else '') for k, v in keyword_values.items()})\n     except Exception:  # pylint: disable=broad-except\n         return iter([util.Uninferable])\n     return iter([nodes.Const(value=formatted_string, parent=node)])\n"
+  },
+  {
+    "instance_id": "pylint-dev__astroid-1268",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/astroid/nodes/as_string.py b/astroid/nodes/as_string.py\nindex 1234567..89abcde 100644\n--- a/astroid/nodes/as_string.py\n+++ b/astroid/nodes/as_string.py\n@@ -53,6 +53,9 @@ class AsStringVisitor:\n         return node.accept(self).replace(DOC_NEWLINE, \"\\n\")\n \n     # ... other visit methods ...\n+\n+    def visit_unknown(self, node):\n+        return \"Unknown.Unknown()\"\n"
+  },
+  {
+    "instance_id": "pyvista__pyvista-4315",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pyvista/core/objects.py b/pyvista/core/objects.py\nindex 3b3e5f2..f4e5c3a 100644\n--- a/pyvista/core/objects.py\n+++ b/pyvista/core/objects.py\n@@ -10,6 +10,7 @@ import collections.abc\n import logging\n import os\n import pathlib\n+from collections.abc import Sequence\n \n import numpy as np\n import pyvista\n@@ -1183,6 +1184,9 @@ class RectilinearGrid(_vtk.vtkRectilinearGrid, Grid):\n         if x is None:\n             x = []\n \n+        if isinstance(x, Sequence):\n+            x = np.array(x)\n+            \n         if isinstance(x, np.ndarray):\n             # Create grid from numpy arrays\n             y = np.array(y)\n"
+  },
+  {
+    "instance_id": "pydicom__pydicom-1694",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pydicom/dataset.py b/pydicom/dataset.py\nindex 1234567..89abcde 100644\n--- a/pydicom/dataset.py\n+++ b/pydicom/dataset.py\n@@ -2492,8 +2492,10 @@ class Dataset(SortableDict, DatasetBase):\n         \"\"\"\n         from pydicom.json import convert_to_python_number\n \n-        data_element = self[key]\n-        tag = Tag(data_element.tag)\n+        try:\n+            data_element = self[key]\n+            tag = Tag(data_element.tag)\n+        except Exception:\n+            if suppress_invalid_tags:\n+                continue\n+            raise\n \n         # If the tag is private and we want to suppress them\n         if suppress_invalid_tags and tag.is_private:\n"
+  },
+  {
+    "instance_id": "pydicom__pydicom-1413",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\n--- a/pydicom/tests/test_valuerep.py\n+++ b/pydicom/tests/test_valuerep.py\n@@ -1546,3 +1546,16 @@ def test_set_value(vr, pytype, vm0, vmN, keyword):\n     elem = ds[keyword]\n     assert elem.value == list(vmN)\n     assert list(vmN) == elem.value\n+\n+\n+@pytest.mark.parametrize(\"vr, pytype, vm0, vmN, keyword\", VALUE_REFERENCE)\n+def test_assigning_bytes(vr, pytype, vm0, vmN, keyword):\n+    \"\"\"Test that byte VRs are excluded from the backslash check.\"\"\"\n+    if pytype == bytes:\n+        ds = Dataset()\n+        value = b\"\\x00\\x01\" + b\"\\\\\" + b\"\\x02\\x03\"\n+        setattr(ds, keyword, value)\n+        elem = ds[keyword]\n+        assert elem.VR == vr\n+        assert elem.value == value\n+        assert elem.VM == 1\n--- a/pydicom/dataset.py\n+++ b/pydicom/dataset.py\n@@ -1000,7 +1000,7 @@ class Dataset(SupportsEquality):\n         # Check if the value is a multi-value\n         if isinstance(value, MultiValue):\n             value = bytes(value)\n-        elif isinstance(value, bytes):\n+        elif isinstance(value, (bytes, bytearray)):\n             pass\n         elif isinstance(value, str):\n             value = value.encode(default_encoding)\n"
+  },
+  {
+    "instance_id": "pydicom__pydicom-901",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pydicom/config.py b/pydicom/config.py\nindex 1234567..89abcde 100644\n--- a/pydicom/config.py\n+++ b/pydicom/config.py\n@@ -1,7 +1,6 @@\n import logging\n \n logger = logging.getLogger('pydicom')\n-handler = logging.StreamHandler()\n-logger.addHandler(handler)\n-logger.setLevel(logging.DEBUG)\n+logger.addHandler(logging.NullHandler())\n \n debugging = False\n \n"
+  },
+  {
+    "instance_id": "pydicom__pydicom-1139",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pydicom/valuerep.py b/pydicom/valuerep.py\nindex 1234567..89abcde 100644\n--- a/pydicom/valuerep.py\n+++ b/pydicom/valuerep.py\n@@ -1,6 +1,7 @@\n class PersonName3:\n     def __init__(self, val, encodings=None):\n         self.original_string = val\n+        self._string = str(val)\n \n     def decode(self):\n         # Decoding logic here\n@@ -10,6 +11,10 @@ class PersonName3:\n         pass\n \n     def __eq__(self, other):\n+        return self._string == other\n+\n+    def __iter__(self):\n+        return iter(self._string)\n \n class PersonName(PersonName3):\n     def __init__(self, val, encodings=None):\n"
+  },
+  {
+    "instance_id": "pydicom__pydicom-1256",
+    "model_name_or_path": "gpt-4o",
+    "model_patch": "diff\ndiff --git a/pydicom/jsonrep.py b/pydicom/jsonrep.py\nindex 1234567..89abcde 100644\n--- a/pydicom/jsonrep.py\n+++ b/pydicom/jsonrep.py\n@@ -224,7 +224,7 @@ def from_json(json_dataset, bulk_data_uri_handler=None):\n             if 'BulkDataURI' in value:\n                 value = bulk_data_uri_handler(value['BulkDataURI'])\n         elif vr == 'SQ':\n-            for item in value:\n+            for item in value['Value']:\n                 from_json(item, bulk_data_uri_handler)\n         else:\n             value = convert_to_python_number(value, vr)\n"
+  }
+]

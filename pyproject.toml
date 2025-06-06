@@ -5,6 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "astroid>=3.3.10",
     "datasets>=3.6.0",
+    "marshmallow>=4.0.0",
+    "modal>=1.0.3",
+    "numpy>=2.2.6",
     "openai>=1.84.0",
+    "pvlib>=0.12.0",
+    "pydicom>=3.0.1",
+    "pytest>=8.4.0",
+    "pyvista>=0.45.2",
+    "sb-cli>=0.1.5",
+    "sqlfluff>=3.4.0",
 ]
