@@ -45,6 +45,21 @@ python -m swebench.harness.run_evaluation \
 The langgraph_agent is able to achieve a patch rate of 0-2 out of the 10/23 working test cases, which is a 0-20% effective patch rate. 
 In the SWE-Bench Paper, gpt-4o was able to achieve a 2.67% effective patch rate. 
 
+## Langgraph Agent 
+
+Datapoint -> Create Container -> Apply test patch and generate errors -> Find source file -> Scrape source file -> Send to ensemble of LLMs to generate diff patches -> Ensemble agent chooses best response -> END
+
+## RAG Agent 
+
+Datapoint -> Use BM25 Retriever to retrieve relevant chunks of repo -> Send to LLM -> Generate diff patch -> END
+
+
+## Future Works 
+Transfer over all datapoints to Langgraph Agent, need to just debug containers as a lot of them are deprecated. Make the langgraph agent able to have persistent memory, CoT prompting, and able to interact w env(Docker container). Allow it to call tools and receive outputs, like in the paper. 
+
+
+
+
 ## Problems 
 
 Many of the SWE-Bench_Lite test cases are either deprecated or only work on Linux machines. 
