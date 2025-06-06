@@ -4,4 +4,5 @@ python -m swebench.harness.run_evaluation \
   --dataset_name swe-bench-lite \
   --split dev \
   --max_workers 2 \
+  --namespace ''
   --run_id my_run_001

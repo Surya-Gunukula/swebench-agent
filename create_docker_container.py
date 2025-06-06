@@ -46,8 +46,8 @@ def run_patch_and_tests_in_docker(
     repo: str,
     commit: str,
     test_patch: str,
-    llm_patch: str,
-    python_base_image: str = "python:3.9-slim"
+    setup_only: bool,
+    python_base_image: str = "python:3.9-slim",
 ) -> dict:
     """
     1. Launch a Python 3.9‐slim container.
@@ -73,16 +73,20 @@ def run_patch_and_tests_in_docker(
 
     # Create a temporary host directory to mount into the container
     with tempfile.TemporaryDirectory(prefix="swebench_workspace_") as host_tmp_dir:
-        host_tmp = Path(host_tmp_dir)
+        host_tmp = Path("/Users/suryagunukula/Developer/swebench-agent/container")
+        host_tmp.mkdir(parents=True, exist_ok=True) 
         # We will clone into /workspace/<something> inside the container
         container_workspace = "/workspace"
+        volume_name = "swebench_volume"
+        client.volumes.create(name=volume_name)
 
         print(f"▶️  Launching container from image: {python_base_image}")
         container = client.containers.run(
             image=python_base_image,
             command="sleep infinity",
             working_dir="/workspace",
-            volumes={ str(host_tmp): {"bind": "/workspace", "mode": "rw"} },
+            volumes={ str(host_tmp): {"bind": "/workspace", "mode": "rw"},
+                    volume_name: {"bind": "/mnt/shared", "mode": "rw"}, },
             detach=True,
             tty=True,  # allocate a tty so bash -lc works properly
         )
@@ -124,7 +128,7 @@ def run_patch_and_tests_in_docker(
                 return results
 
             # 3) pip install the repository so that pytest can pick up the package 
-            cmd_install_repo = f"cd {clone_dir} && pip install ."
+            cmd_install_repo = f"cd {clone_dir} && pip install 'numpy<2.0' && pip install ."
             print("    • pip install the repository (so pytest can import it)…")
             code, out, err = _docker_exec(container, cmd_install_repo)
             results["install_repo_exit"] = (code, out, err)
@@ -142,10 +146,15 @@ def run_patch_and_tests_in_docker(
             code, out, err = _docker_exec(container, cmd_install_repo)
             results["install_repo_exit"] = (code, out, err)
 
+            if setup_only:
+                print("Setup-only mode complete. Skipping patching and testing")
+                return results
+            
+
+
             # 4) Write the `test_patch` and `llm_patch` into files in the host‐mounted workspace.
             #    We write on the host (in host_tmp) so the container can see them under /workspace.
             test_patch_file = _write_patch_to_file(test_patch, host_tmp, "tmp_test.patch")
-            llm_patch_file  = _write_patch_to_file(llm_patch,  host_tmp, "tmp_llm.patch")
 
             # 5) Apply the test‐patch inside the container:
             cmd_apply_test = f"cd {clone_dir} && git apply /workspace/tmp_test.patch"
@@ -153,7 +162,7 @@ def run_patch_and_tests_in_docker(
             code, out, err = _docker_exec(container, cmd_apply_test)
             results["apply_test_exit"] = (code, out, err)
             if code != 0:
-                print("    ❌ Failed to apply test_patch. Aborting.")
+                print("    Failed to apply test_patch. Aborting.")
                 return results
 
             """
@@ -163,13 +172,13 @@ def run_patch_and_tests_in_docker(
             code, out, err = _docker_exec(container, cmd_apply_llm)
             results["apply_llm_exit"] = (code, out, err)
             if code != 0:
-                print("    ❌ Failed to apply llm_patch. Aborting.")
+                print("    Failed to apply llm_patch. Aborting.")
                 return results
             """
 
             # 7) Finally, run pytest inside the repo folder.
             #    We use “pytest -q” for brevity. You can add flags like “--maxfail=1” etc.
-            cmd_pytest = f"cd {clone_dir} && pytest -q"
+            cmd_pytest = f"cd {clone_dir} && pytest -q -m 'not dbt'"
             print("    • Running pytest -q …")
             code, out, err = _docker_exec(container, cmd_pytest)
             results["pytest_exit"]   = code
@@ -179,31 +188,32 @@ def run_patch_and_tests_in_docker(
             return results
 
         finally:
-            # 8) Tear everything down:
-            print("▶️  Stopping and removing container …")
-            try:
-                container.stop(timeout=5)
-            except Exception:
-                pass
-            try:
-                container.remove(force=True)
-            except Exception:
-                pass
+            if not setup_only:
+                # 8) Tear everything down:
+                print("▶️  Stopping and removing container …")
+                try:
+                    container.stop(timeout=5)
+                except Exception:
+                    pass
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
 
 
 if __name__ == "__main__":
     dev_set = load_swe_bench_lite('dev')
 
-    example_repo       = "sqlfluff/sqlfluff"
-    example_commit     = "14e1a23a3"  
-    example_test_patch = dev_set[0]["test_patch"]
-    example_llm_patch  = dev_set[0]["test_patch"]
+    example_repo       = dev_set[10]["repo"]
+    example_commit     = dev_set[10]["base_commit"] 
+    example_test_patch = dev_set[10]["test_patch"]
+    example_llm_patch  = dev_set[10]["test_patch"]
     # Run everything inside Docker:
     results = run_patch_and_tests_in_docker(
         repo=example_repo,
         commit=example_commit,
         test_patch=example_test_patch,
-        llm_patch=example_llm_patch,
+        setup_only=True,
         python_base_image="python:3.9-slim"
     )
 
