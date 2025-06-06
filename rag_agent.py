@@ -31,6 +31,7 @@ class State(TypedDict):
     context: str 
     output: str
     error: str
+    problem_statement: str
 
 
 def llm_call(state: State):
@@ -60,9 +61,6 @@ def llm_call(state: State):
 
 
 
-
-
-
 graph_builder = StateGraph(State)
 graph_builder.add_node("llm_call", llm_call)
 
@@ -77,16 +75,19 @@ def test_single_example_rag(datapoint):
     example_repo       = datapoint["repo"]
     example_commit     = datapoint["base_commit"] 
     example_test_patch = datapoint["test_patch"]
+    problem_statement = datapoint["problem_statement"]
     context  = datapoint["text"]
 
-    state = graph_worker.invoke({"repo_dir": example_repo, "context": context})
+    context = context[:30000]
+
+    state = graph_worker.invoke({"repo_dir": example_repo, "context": context, "problem_statement": problem_statement})
 
     return state['output'][0].content
 
 if __name__ == '__main__':
     dev_set = load_swe_bench_lite_bm25('dev')
     datapoint = dev_set[5]
-    result = test_single_example(datapoint)
+    result = test_single_example_rag(datapoint)
     print(result)
 
 

@@ -9,6 +9,7 @@ from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import Send
 from pathlib import Path
+import time
 
 from create_docker_container import *
 
@@ -133,11 +134,18 @@ def llm_call(state: State):
                             """
             )
     ]
+    output1 = llm.invoke(messages).content
+    time.sleep(10)
+    output2 = llm.invoke(messages).content
+    time.sleep(10)
+    output3 = llm.invoke(messages).content
+    time.sleep(10)
+
     return {
         "output": [
-            llm.invoke(messages).content, 
-            llm.invoke(messages).content, 
-            llm.invoke(messages).content, 
+            output1, 
+            output2, 
+            output3
         ]
     }
 

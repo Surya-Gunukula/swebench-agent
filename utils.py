@@ -74,14 +74,12 @@ def apply_test_patch(repo_dir: Path, test_patch: str) -> bool:
         print(f"ERROR: Could not write patch file at {test_file!s}: {e}")
         return False
 
-    # 2.b) Confirm it exists
     if not test_file.exists():
         print(f"ERROR: After write_text, patch file is missing at: {test_file.resolve()}")
         return False
     else:
         print(f"DEBUG: Patch file confirmed at: {test_file.resolve()}")
 
-    # 3) Dry‐run check using relative path under repo_dir
     check_cmd = ["git", "-C", str(repo_dir.resolve()), "apply", "--check", patch_filename]
     print("DEBUG: Running:", " ".join(check_cmd))
     check_proc = subprocess.run(
@@ -93,7 +91,6 @@ def apply_test_patch(repo_dir: Path, test_patch: str) -> bool:
         test_file.unlink(missing_ok=True)
         return False
 
-    # 4) Actually apply it
     apply_cmd = ["git", "-C", str(repo_dir.resolve()), "apply", patch_filename]
     print("DEBUG: Now running:", " ".join(apply_cmd))
     apply_proc = subprocess.run(
@@ -105,7 +102,6 @@ def apply_test_patch(repo_dir: Path, test_patch: str) -> bool:
         test_file.unlink(missing_ok=True)
         return False
 
-    # 5) Clean up
     test_file.unlink(missing_ok=True)
     return True
 
@@ -154,63 +150,6 @@ def extract_failure_location(stdout_lines: list[str]):
             return full_path, line_no
     return None
 
-    
-
-def detect_test_command(repo_dir: Path) -> str:
-
-    if (repo_dir / "pytest.ini").exists() or (repo_dir / "tox.ini").exists():
-        return "pytest -q"
-    if (repo_dir / "setup.py").exists() or (repo_dir / "pyproject.toml").exists():
-        try:
-            if (repo_dir / "setup.py").exists():
-                setup_text = (repo_dir / "setup.py").read_text(errors="ignore")
-                if "pytest" in setup_text:
-                    return "pytest -q"
-            if (repo_dir / "pyproject.toml").exists():
-                toml_text = (repo_dir / "pyproject.toml").read_text(errors="ignore")
-                if "pytest" in toml_text:
-                    return "pytest -q"
-        except Exception:
-            pass
-        return "python -m unittest discover"
-
-    pkg_json = repo_dir / "package.json"
-    if pkg_json.exists():
-        try:
-            data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
-            scripts = data.get("scripts", {})
-            if "test" in scripts:
-                return "npm test"
-        except Exception:
-            pass
-        return "npm test"
-
-    if (repo_dir / "go.mod").exists() or any(repo_dir.glob("*.go")):
-        return "go test ./..."
-
-    if (repo_dir / "Cargo.toml").exists():
-        return "cargo test --quiet"
-
-    if (repo_dir / "pom.xml").exists():
-        return "mvn test -q"
-
-    if (repo_dir / "build.gradle").exists() or (repo_dir / "build.gradle.kts").exists():
-        if (repo_dir / "gradlew").exists():
-            return "./gradlew test --quiet"
-        return "gradle test --quiet"
-
-    makefile = repo_dir / "Makefile"
-    if makefile.exists():
-        try:
-            content = makefile.read_text(errors="ignore").splitlines()
-            for line in content:
-                if line.lstrip().startswith("test:"):
-                    return "make test"
-        except Exception:
-            pass
-
-    return ""
-
 def install_clone_into_venv(repo_dir: Path) -> bool:
     """
     Inside the cloned repo, run:
@@ -257,6 +196,16 @@ def install_clone_into_venv(repo_dir: Path) -> bool:
     except subprocess.CalledProcessError as e:
         print(f"↳ Failed to install dependencies in {repo_dir}:\n{e.stderr or e}")
         return False
+    
+
+def strip_code_fence(text: str) -> str:
+    if text.startswith("```diff"):
+        text = text[len("```diff"):].strip()
+    elif text.startswith("```"):
+        text = text[len("```"):].strip()
+    if text.endswith("```"):
+        text = text[:-len("```")].strip()
+    return text
     
 
     
