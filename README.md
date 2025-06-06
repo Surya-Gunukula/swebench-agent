@@ -8,6 +8,17 @@ python -m swebench.harness.run_evaluation \
   --run_id my_run_001
 
 
+python -m swebench.harness.run_evaluation \
+  --predictions_path 'gold' \
+  --dataset_name swe-bench-lite \
+  --split dev \
+  --max_workers 2 \
+  --namespace '' \
+  --run_id my_run_001
+
+
+
+
 #Also doesn't work 
 sb-cli submit swe-bench_lite dev \
     --predictions_path predictions.json \

@@ -128,7 +128,7 @@ def run_patch_and_tests_in_docker(
                 return results
 
             # 3) pip install the repository so that pytest can pick up the package 
-            cmd_install_repo = f"cd {clone_dir} && pip install 'numpy<2.0' && pip install ."
+            cmd_install_repo = f"cd {clone_dir} && pip install simplejson pytz python-dateutil && pip install ."
             print("    • pip install the repository (so pytest can import it)…")
             code, out, err = _docker_exec(container, cmd_install_repo)
             results["install_repo_exit"] = (code, out, err)
@@ -204,16 +204,18 @@ def run_patch_and_tests_in_docker(
 if __name__ == "__main__":
     dev_set = load_swe_bench_lite('dev')
 
-    example_repo       = dev_set[10]["repo"]
-    example_commit     = dev_set[10]["base_commit"] 
-    example_test_patch = dev_set[10]["test_patch"]
-    example_llm_patch  = dev_set[10]["test_patch"]
+    example_repo       = dev_set[6]["repo"]
+    example_commit     = dev_set[6]["base_commit"] 
+    example_test_patch = dev_set[6]["test_patch"]
+    example_llm_patch  = dev_set[6]["test_patch"]
+
+    print(example_repo)
     # Run everything inside Docker:
     results = run_patch_and_tests_in_docker(
         repo=example_repo,
         commit=example_commit,
         test_patch=example_test_patch,
-        setup_only=True,
+        setup_only=False,
         python_base_image="python:3.9-slim"
     )
 
@@ -229,3 +231,4 @@ if __name__ == "__main__":
         else:
             print(f"{k}: {v}")
     print("================================")
+
